@@ -2,6 +2,8 @@ with import <nixpkgs> {};
 mkShell {
   NIX_LD_LIBRARY_PATH = lib.makeLibraryPath [
     stdenv.cc.cc
+    libusb1
+    zlib
     #openssl
     # ...
   ];
