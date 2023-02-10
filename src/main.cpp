@@ -22,10 +22,22 @@ const unsigned int configSTACK = 51200;
 // Include the Arduino library.
 #include "libssh_esp32.h"
 
-// EXAMPLE includes/defines START
 #include <libssh/libssh.h>
 #include "common.h"
-// EXAMPLE includes/defines FINISH
+
+#include "SPIFFS.h"
+#include "driver/uart.h"
+#include "esp_vfs_dev.h"
+
+#include "libssh_esp32_config.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "libssh/priv.h"
+#include <libssh/libssh.h>
+
 
 volatile bool wifiPhyConnected;
 
@@ -54,9 +66,7 @@ typedef enum
 static volatile devState_t devState;
 static volatile bool gotIpAddr, gotIp6Addr;
 
-#include "SPIFFS.h"
-#include "driver/uart.h"
-#include "esp_vfs_dev.h"
+
 
 // EXAMPLE functions START
 /*
@@ -78,16 +88,7 @@ The goal is to show the API in action. It's not a reference on how terminal
 clients must be made or how a client should react.
  */
 
-#include "libssh_esp32_config.h"
 
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "libssh/priv.h"
-#include <libssh/libssh.h>
-#include "common.h"
 
 
 int verify_knownhost(ssh_session session)
@@ -205,13 +206,6 @@ The goal is to show the API in action. It's not a reference on how terminal
 clients must be made or how a client should react.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <libssh/libssh.h>
-#include "common.h"
-
 
 
 static int auth_keyfile(ssh_session session, char* keyfile)
@@ -292,9 +286,7 @@ The goal is to show the API in action. It's not a reference on how terminal
 clients must be made or how a client should react.
  */
 
-#include <libssh/libssh.h>
-#include "common.h"
-#include <stdio.h>
+
 
 ssh_session connect_ssh(const char *host, const char *user,int verbosity){
   ssh_session session;
@@ -441,13 +433,16 @@ failed:
 // EXAMPLE main FINISH
 
 #define newDevState(s) (devState = s)
+
+
 esp_err_t event_cb(void *ctx, system_event_t *event)
 {
   switch(event->event_id)
   {
     case SYSTEM_EVENT_STA_START:
-      Serial.print("% WiFi enabled with SSID=");
-      Serial.println(configSTASSID);
+      //Serial.print("% WiFi enabled with SSID=");
+      //Serial.println(configSTASSID);
+      //printf("% WiFi enabled with SSID= %s", configSTASSID);
       break;
     case SYSTEM_EVENT_STA_CONNECTED:
       WiFi.enableIpV6();
@@ -460,13 +455,11 @@ esp_err_t event_cb(void *ctx, system_event_t *event)
       {
         gotIp6Addr = true;
       }
-      Serial.print("% IPv6 Address: ");
-      Serial.println(IPv6Address(event->event_info.got_ip6.ip6_info.ip.addr));
+      //printf("% IPv4 Address: %s \n", IPv6Address(event->event_info.got_ip6.ip6_info.ip.addr)  );
       break;
     case SYSTEM_EVENT_STA_GOT_IP:
       gotIpAddr = true;
-      Serial.print("% IPv4 Address: ");
-      Serial.println(IPAddress(event->event_info.got_ip.ip_info.ip.addr));
+     // printf("% IPv4 Address: %s \n", IPAddress(event->event_info.got_ip.ip_info.ip.addr));
       break;
     case SYSTEM_EVENT_STA_LOST_IP:
       //gotIpAddr = false;
@@ -491,7 +484,7 @@ void enterDeepsleep(){
   //0b010100 = bitmask GPIO2, GPIO4
 
   esp_deep_sleep_enable_gpio_wakeup(0b010100, ESP_GPIO_WAKEUP_GPIO_HIGH);
-  Serial.println("Going to deep-sleep now\n");
+  printf("Going to deep-sleep now\n");
   Serial.flush(); 
   //vTaskDelay(100 / portTICK_PERIOD_MS);
   esp_deep_sleep_start();
@@ -502,6 +495,8 @@ void controlTask(void *pvParameter)
 
   doorCMD_t state = *(doorCMD_t *) pvParameter;
 
+
+//const char *basePath = "/spiffs"
 
   // Mount the file system.
   boolean fsGood = SPIFFS.begin();
@@ -608,32 +603,12 @@ void controlTask(void *pvParameter)
 }
 
 
-void print_wakeup_reason(){
-  esp_sleep_wakeup_cause_t wakeup_reason;
-  wakeup_reason = esp_sleep_get_wakeup_cause();
-
-  switch(wakeup_reason)
-  {
-    case ESP_SLEEP_WAKEUP_EXT0 : Serial.println("Wakeup caused by external signal using RTC_IO"); break;
-    case ESP_SLEEP_WAKEUP_EXT1 : Serial.println("Wakeup caused by external signal using RTC_CNTL"); break;
-    case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
-    case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
-    case ESP_SLEEP_WAKEUP_GPIO : 
-    {
-        Serial.println("Wakeup caused by GPIO program"); 
-        uint64_t GPIO_reason = esp_sleep_get_gpio_wakeup_status();
-        Serial.print("GPIO that triggered the wake up: GPIO ");
-        Serial.println((log(GPIO_reason))/log(2), 0);
-        break;
-    }
-    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
-  }
-}
 
 doorCMD_t wakeSelector(){
   doorCMD_t res = CMD_UNKNOWN;
   u_int64_t wakeMask = esp_sleep_get_gpio_wakeup_status();
+
+  //printf("GPIO that triggered the wake up: GPIO %hhu \n",  (uint8_t)((log(wakeMask))/log(2), 0) );
 
   if (wakeMask == 0b00100 ){
     res = CMD_OPEN;
@@ -680,7 +655,7 @@ void setup()
     default:  break;
   }
 
-  //WiFi.setHostname("shackey");
+  //WiFi .setHostname("shackey");
   esp_netif_init();
 
   esp_event_loop_init(event_cb, NULL);
@@ -694,12 +669,10 @@ void loop()
 {
   // Nothing to do here since controlTask has taken over.
   vTaskDelay(100 / portTICK_PERIOD_MS);
-/*
+
   //somthing went wrong go to sleep
-  if (esp_timer_get_time() > 40*1000*1000){//uptime > 20 sec 
+  if (esp_timer_get_time() > 30*1000*1000){//uptime > 30 sec 
     printf("took too long\n");
     enterDeepsleep();
   } 
-
-  */
 }
