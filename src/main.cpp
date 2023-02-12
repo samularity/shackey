@@ -25,7 +25,8 @@ const unsigned int configSTACK = 51200;
 #include <libssh/libssh.h>
 #include "common.h"
 
-#include "SPIFFS.h"
+#include "sspiffs.h" //not arduino lib
+
 #include "driver/uart.h"
 #include "esp_vfs_dev.h"
 
@@ -495,39 +496,17 @@ void controlTask(void *pvParameter)
 
   doorCMD_t state = *(doorCMD_t *) pvParameter;
 
+if (ESP_OK == initSPIFFS()){
+  printf("sspifs init ok\n");
+    printSPIFFSinfo();
+}
+else{
+  //no key, just give up
+  enterDeepsleep();
+}
 
-//const char *basePath = "/spiffs"
 
-  // Mount the file system.
-  boolean fsGood = SPIFFS.begin();
-  if (!fsGood)
-  {
-    printf("%% No formatted SPIFFS filesystem found to mount.\n");
-    printf("%% Format SPIFFS and mount now (NB. may cause data loss) [y/n]?\n");
-    while (!Serial.available()) {}
-    char c = Serial.read();
-    if (c == 'y' || c == 'Y')
-    {
-      printf("%% Formatting...\n");
-      fsGood = SPIFFS.format();
-      if (fsGood) SPIFFS.begin();
-    }
-  }
-  if (!fsGood)
-  {
-    printf("%% Aborting now.\n");
-    while (1) vTaskDelay(60000 / portTICK_PERIOD_MS);
-  }
-  printf(
-    "%% Mounted SPIFFS used=%d total=%d\r\n", SPIFFS.usedBytes(),
-    SPIFFS.totalBytes());
 
-  File root = SPIFFS.open("/");
-  File file = root.openNextFile();
-  while(file){
-      printf("\t/%s\n", file.name());
-      file = root.openNextFile();
-  }
 
   wifiPhyConnected = false;
   WiFi.disconnect(true);
