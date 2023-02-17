@@ -1,339 +1,264 @@
 
 #include "ssh.h"
+/* ssh Client Example
 
-int verify_knownhost(ssh_session session);
-static int auth_keyfile(ssh_session session, char* keyfile);
-int authenticate_console_shack(ssh_session session);
-ssh_session connect_ssh(const char *host, const char *user,int verbosity);
+	 This example code is in the Public Domain (or CC0 licensed, at your option.)
 
-
-
-// EXAMPLE functions START
-/*
- * knownhosts.c
- * This file contains an example of how verify the identity of a
- * SSH server using libssh
- */
-
-/*
-Copyright 2003-2009 Aris Adamantiadis
-
-This file is part of the SSH Library
-
-You are free to copy this file, modify it in any way, consider it being public
-domain. This does not apply to the rest of the library though, but it is
-allowed to cut-and-paste working code from this file to any license of
-program.
-The goal is to show the API in action. It's not a reference on how terminal
-clients must be made or how a client should react.
- */
-
-int verify_knownhost(ssh_session session)
-{
-    enum ssh_known_hosts_e state;
-    char buf[10];
-    unsigned char *hash = NULL;
-    size_t hlen;
-    ssh_key srv_pubkey;
-    int rc;
-
-    rc = ssh_get_server_publickey(session, &srv_pubkey);
-    if (rc < 0) {
-        return -1;
-    }
-
-    rc = ssh_get_publickey_hash(srv_pubkey,
-                                SSH_PUBLICKEY_HASH_SHA256,
-                                &hash,
-                                &hlen);
-    ssh_key_free(srv_pubkey);
-    if (rc < 0) {
-        return -1;
-    }
-
-    state = ssh_session_is_known_server(session);
-
-    switch(state) {
-    case SSH_KNOWN_HOSTS_CHANGED:
-        fprintf(stderr,"Host key for server changed : server's one is now :\n");
-        ssh_print_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
-        ssh_clean_pubkey_hash(&hash);
-        fprintf(stderr,"For security reason, connection will be stopped\n");
-        return -1;
-    case SSH_KNOWN_HOSTS_OTHER:
-        fprintf(stderr,"The host key for this server was not found but an other type of key exists.\n");
-        fprintf(stderr,"An attacker might change the default server key to confuse your client"
-                "into thinking the key does not exist\n"
-                "We advise you to rerun the client with -d or -r for more safety.\n");
-        return -1;
-    case SSH_KNOWN_HOSTS_NOT_FOUND:
-        fprintf(stderr,"Could not find known host file. If you accept the host key here,\n");
-        fprintf(stderr,"the file will be automatically created.\n");
-        /* fallback to SSH_SERVER_NOT_KNOWN behavior */
-        FALL_THROUGH;
-    case SSH_SERVER_NOT_KNOWN:
-        fprintf(stderr,
-                "The server is unknown. Do you trust the host key (yes/no)?\n");
-        ssh_print_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
-
-        /*
-        if (fgets(buf, sizeof(buf), stdin) == NULL) {
-            ssh_clean_pubkey_hash(&hash);
-            return -1;
-        }
-        */
-        buf[0]='y';
-        buf[1]='e';
-        buf[2]='s';
-
-        if(strncasecmp(buf,"yes",3)!=0){
-            ssh_clean_pubkey_hash(&hash);
-            return -1;
-        }
-        fprintf(stderr,"This new key will be written on disk for further usage. do you agree ?\n");
-        /*
-        if (fgets(buf, sizeof(buf), stdin) == NULL) {
-            ssh_clean_pubkey_hash(&hash);
-            return -1;
-        }
-        */
-        buf[0]='y';
-        buf[1]='e';
-        buf[2]='s';
-
-        if(strncasecmp(buf,"yes",3)==0){
-            rc = ssh_session_update_known_hosts(session);
-            if (rc != SSH_OK) {
-                ssh_clean_pubkey_hash(&hash);
-                fprintf(stderr, "error %s\n", strerror(errno));
-                return -1;
-            }
-        }
-
-        break;
-    case SSH_KNOWN_HOSTS_ERROR:
-        ssh_clean_pubkey_hash(&hash);
-        fprintf(stderr,"%s",ssh_get_error(session));
-        return -1;
-    case SSH_KNOWN_HOSTS_OK:
-        break; /* ok */
-    }
-
-    ssh_clean_pubkey_hash(&hash);
-
-    return 0;
-}
-
-
-static int auth_keyfile(ssh_session session, char* keyfile)
-{
-    ssh_key key = NULL;
-    char pubkey[132] = {0}; // +".pub"
-    int rc;
-
-    snprintf(pubkey, sizeof(pubkey), "%s.pub", keyfile);
-
-    rc = ssh_pki_import_pubkey_file( pubkey, &key);
-
-    if (rc != SSH_OK)
-        return SSH_AUTH_DENIED;
-
-    rc = ssh_userauth_try_publickey(session, NULL, key);
-
-    ssh_key_free(key);
-
-    if (rc!=SSH_AUTH_SUCCESS)
-        return SSH_AUTH_DENIED;
-
-    rc = ssh_pki_import_privkey_file(keyfile, NULL, NULL, NULL, &key);
-
-    if (rc != SSH_OK)
-        return SSH_AUTH_DENIED;
-    rc = ssh_userauth_publickey(session, NULL, key);
-    ssh_key_free(key);
-
-    return rc;
-}
-
-/*
-static void error(ssh_session session)
-{
-    fprintf(stderr,"Authentication failed: %s\n",ssh_get_error(session));
-}
+	 Unless required by applicable law or agreed to in writing, this
+	 software is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
+	 CONDITIONS OF ANY KIND, either express or implied.
 */
+#include <string.h>
+#include <sys/types.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <stdio.h>
+#include <ctype.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/event_groups.h"
+#include "esp_log.h"
+#include "netdb.h" // gethostbyname
 
-int authenticate_console_shack(ssh_session session)
+#include "libssh2_config.h"
+#include <libssh2.h>
+#include <libssh2_sftp.h>
+
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/time.h>
+
+#include "ssh.h"
+#include "esp_timer.h"
+
+static const char *TAG = "SSH";
+
+extern EventGroupHandle_t xEventGroup;
+extern int TASK_FINISH_BIT;
+
+#define CONFIG_SSH_USER "sam"
+#define CONFIG_SSH_PASSWORD ""
+#define CONFIG_SSH_PORT 8022
+#define CONFIG_SSH_HOST "over.voltage.nz"
+static int waitsocket(int socket_fd, LIBSSH2_SESSION *session)
 {
-    int rc;
-    char *banner;
-#ifdef EXECTEST
-    char fname[64] = {"/spiffs/jetson"};
-#else
-    char fname[64] = {"/spiffs/key"};
-#endif
+	struct timeval timeout;
+	int rc;
+	fd_set fd;
+	fd_set *writefd = NULL;
+	fd_set *readfd = NULL;
+	int dir;
 
-    rc = auth_keyfile(session, fname);
+	timeout.tv_sec = 10;
+	timeout.tv_usec = 0;
 
-    if(rc == SSH_AUTH_SUCCESS) {
-      banner = ssh_get_issue_banner(session);
-      if (banner) {
-          printf("%s\n",banner);
-          SSH_STRING_FREE_CHAR(banner);
-      }
-    }
-    else{
-      printf("SSH_AUTH_FAILED\n");
-    }
+	FD_ZERO(&fd);
 
-    return rc;
+	FD_SET(socket_fd, &fd);
+
+	/* now make sure we wait in the correct direction */
+	dir = libssh2_session_block_directions(session);
+
+	if(dir & LIBSSH2_SESSION_BLOCK_INBOUND)
+		readfd = &fd;
+
+	if(dir & LIBSSH2_SESSION_BLOCK_OUTBOUND)
+		writefd = &fd;
+
+	rc = select(socket_fd + 1, readfd, writefd, NULL, &timeout);
+
+	return rc;
 }
 
+#define BUFSIZE 3200
 
-ssh_session connect_ssh(const char *host, const char *user,int verbosity){
-  ssh_session session =NULL;
-  int auth=0;
+void ssh_task(void *pvParameters)
+{
+	char *task_parameter = (char *)pvParameters;
+	ESP_LOGI(TAG, "Start task_parameter=%s", task_parameter);
 
-  session=ssh_new();
-  if (session == NULL) {
-    return NULL;
-  }
+	// SSH Staff
+	int sock;
+	struct sockaddr_in sin;
+	LIBSSH2_SESSION *session;
+	LIBSSH2_CHANNEL *channel;
 
-  if(user != NULL){
-    if (ssh_options_set(session, SSH_OPTIONS_USER, user) < 0) {
-      ssh_free(session);
-      return NULL;
-    }
-  }
+	ESP_LOGI(TAG, "libssh2_version is %s", LIBSSH2_VERSION);
+	  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
 
-  if (ssh_options_set(session, SSH_OPTIONS_HOST, host) < 0) {
-    ssh_free(session);
-    return NULL;
-  }
-  ssh_options_set(session, SSH_OPTIONS_LOG_VERBOSITY, &verbosity);
-  if(ssh_connect(session)){
-    fprintf(stderr,"Connection failed : %s\n",ssh_get_error(session));
-    ssh_disconnect(session);
-    ssh_free(session);
-    return NULL;
-  }
-  /*
-  if(verify_knownhost(session)<0){
-    ssh_disconnect(session);
-    ssh_free(session);
-    return NULL;
-  }
-  */
-  auth=authenticate_console_shack(session);
-  if(auth==SSH_AUTH_SUCCESS){
-    printf("ssh auth ok\n");
-    return session;
-  } else if(auth==SSH_AUTH_DENIED){
-    fprintf(stderr,"ssh auth err\n");
-  } else {
-    fprintf(stderr,"Error while authenticating : %s\n",ssh_get_error(session));
-  }
-  ssh_disconnect(session);
-  ssh_free(session);
-  return NULL;
+	int rc = libssh2_init(0);
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	if(rc) {
+		ESP_LOGE(TAG, "libssh2 initialization failed (%d)", rc);
+		while(1) { vTaskDelay(1); }
+	}
+
+	ESP_LOGI(TAG, "CONFIG_SSH_HOST=%s", CONFIG_SSH_HOST);
+	ESP_LOGI(TAG, "CONFIG_SSH_PORT=%d", CONFIG_SSH_PORT);
+	sin.sin_family = AF_INET;
+	//sin.sin_port = htons(22);
+	sin.sin_port = htons(CONFIG_SSH_PORT);
+	sin.sin_addr.s_addr = inet_addr(CONFIG_SSH_HOST);
+	ESP_LOGI(TAG, "sin.sin_addr.s_addr=%lx", sin.sin_addr.s_addr);
+	if (sin.sin_addr.s_addr == 0xffffffff) {
+		struct hostent *hp;
+		hp = gethostbyname(CONFIG_SSH_HOST);
+		if (hp == NULL) {
+			ESP_LOGE(TAG, "gethostbyname fail %s", CONFIG_SSH_HOST);
+			while(1) { vTaskDelay(1); }
+		}
+		struct ip4_addr *ip4_addr;
+		ip4_addr = (struct ip4_addr *)hp->h_addr;
+		sin.sin_addr.s_addr = ip4_addr->addr;
+		ESP_LOGI(TAG, "sin.sin_addr.s_addr=%lx", sin.sin_addr.s_addr);
+	}
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	sock = socket(AF_INET, SOCK_STREAM, 0);
+	if(sock == -1) {
+		ESP_LOGE(TAG, "failed to create socket!");
+		while(1) { vTaskDelay(1); }
+	}
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	if(connect(sock, (struct sockaddr*)(&sin), sizeof(struct sockaddr_in)) != 0) {
+		ESP_LOGE(TAG, "failed to connect!");
+		while(1) { vTaskDelay(1); }
+	}
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	/* Create a session instance */
+	session = libssh2_session_init();
+	if(!session) {
+		ESP_LOGE(TAG, "failed to session init");
+		while(1) { vTaskDelay(1); }
+	}
+
+	/* ... start it up. This will trade welcome banners, exchange keys,
+	 * and setup crypto, compression, and MAC layers
+	 */
+	rc = libssh2_session_handshake(session, sock);
+	if(rc) {
+		ESP_LOGE(TAG, "Failure establishing SSH session: %d", rc);
+		while(1) { vTaskDelay(1); }
+	}
+/*
+	// We could authenticate via password 
+	if(libssh2_userauth_password(session, CONFIG_SSH_USER, CONFIG_SSH_PASSWORD)) {
+		ESP_LOGE(TAG, "Authentication by password failed.");
+		ESP_LOGE(TAG, "Authentication username : [%s].", CONFIG_SSH_USER);
+		while(1) { vTaskDelay(1); }
+	}
+*/
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	/* We could authenticate via privatekey */
+	char publickey[64];
+	char privatekey[64];
+	strcpy(publickey, "/spiffs/jetson.pub");
+	strcpy(privatekey, "/spiffs/jetson");
+	if(libssh2_userauth_publickey_fromfile(session, CONFIG_SSH_USER, publickey, privatekey, NULL)) {
+		ESP_LOGE(TAG, "Authentication by privatekey failed.");
+		ESP_LOGE(TAG, "Authentication username : [%s].", CONFIG_SSH_USER);
+		while(1) { vTaskDelay(1); }
+	}
+
+	libssh2_trace(session, LIBSSH2_TRACE_SOCKET);
+
+	/* Exec non-blocking on the remove host */
+	while((channel = libssh2_channel_open_session(session)) == NULL &&
+		libssh2_session_last_error(session, NULL, NULL, 0) ==
+		LIBSSH2_ERROR_EAGAIN) {
+		waitsocket(sock, session);
+	}
+	if(channel == NULL) {
+		ESP_LOGE(TAG, "libssh2_channel_open_session failed.");
+		while(1) { vTaskDelay(1); }
+	}
+
+	while((rc = libssh2_channel_exec(channel, task_parameter)) == LIBSSH2_ERROR_EAGAIN)
+	waitsocket(sock, session);
+	if(rc != 0) {
+		ESP_LOGE(TAG, "libssh2_channel_exec failed: %d", rc);
+		while(1) { vTaskDelay(1); }
+	}
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	int bytecount = 0;
+	for(;;) {
+		/* loop until we block */
+		int rc;
+		do {
+			char buffer[128];
+			rc = libssh2_channel_read(channel, buffer, sizeof(buffer) );
+			if(rc > 0) {
+				int i;
+				bytecount += rc;
+				//fprintf(stderr, "We read:\n");
+				for(i = 0; i < rc; ++i)
+					//fputc(buffer[i], stderr);
+					fputc(buffer[i], stdout);
+				//fprintf(stderr, "\n");
+			}
+			else if(rc < 0) {
+					/* no need to output this for the EAGAIN case */
+					ESP_LOGI(TAG, "libssh2_channel_read returned %d", rc);
+					//while(1) { vTaskDelay(1); }
+			}
+		}
+		while(rc > 0);
+
+		/* this is due to blocking that would occur otherwise so we loop on
+		 this condition */
+		if(rc == LIBSSH2_ERROR_EAGAIN) {
+			waitsocket(sock, session);
+		}
+		else
+			break;
+	} // end for
+	printf("\n");
+
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	int exitcode = 127;
+	char *exitsignal = (char *)"none";
+	while((rc = libssh2_channel_close(channel)) == LIBSSH2_ERROR_EAGAIN)
+	waitsocket(sock, session);
+	if(rc == 0) {
+		exitcode = libssh2_channel_get_exit_status(channel);
+		libssh2_channel_get_exit_signal(channel, &exitsignal,
+										NULL, NULL, NULL, NULL, NULL);
+	} else {
+		ESP_LOGE(TAG, "libssh2_channel_close failed: %d", rc);
+		while(1) { vTaskDelay(1); }
+	}
+/*
+	if(exitsignal)
+		ESP_LOGI(TAG, "EXIT: %d, SIGNAL: %s, bytecount: %d", exitcode, exitsignal, bytecount);
+		//ESP_LOGI(TAG, "Got signal: %s", exitsignal);
+
+	else
+		ESP_LOGI(TAG, "EXIT: %d, bytecount: %d", exitcode, bytecount);
+*/
+	libssh2_channel_free(channel);
+	channel = NULL;
+
+	// Close a session
+	libssh2_session_disconnect(session, "Normal Shutdown, Thank you for playing");
+	libssh2_session_free(session);
+
+	// Close socket
+	close(sock);
+	ESP_LOGI(TAG, "[%s] done", task_parameter);
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	libssh2_exit();
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+	xEventGroupSetBits( xEventGroup, TASK_FINISH_BIT );
+	vTaskDelete( NULL );
 }
-// EXAMPLE functions FINISH
-
-// EXAMPLE main START
-int ex_main(doorCMD_t shackstate){
-    ssh_session session=NULL;
-    ssh_channel channel = NULL;
-    char buffer[256];
-    int rbytes, wbytes, total = 0;
-    int rc;
-
-#ifdef EXECTEST
-   session = connect_ssh("jetson", "sam", LOGLVL);//get all logs
-#else
-    if (CMD_OPEN == shackstate ){
-        session = connect_ssh("portal.shackspace.de", "open-front", LOGLVL);//get all logs
-    } 
-    else if (CMD_CLOSE == shackstate){
-      session = connect_ssh("portal.shackspace.de", "close", LOGLVL);//get all logs
-    }
-#endif
-
-    if (session == NULL) {
-        ssh_finalize();
-        return 1;
-    }
-
-    channel = ssh_channel_new(session);
-    if (channel == NULL) {
-        ssh_disconnect(session);
-        ssh_free(session);
-        ssh_finalize();
-        return 1;
-    }
-
-    rc = ssh_channel_open_session(channel);
-    if (rc < 0) {
-        goto failed;
-    }
-
-
-
-#ifdef EXECTEST
-    rc = ssh_channel_request_exec(channel, "date");
-    if (rc < 0) {
-        goto failed;
-    }
-#else
-
-    rc = ssh_channel_request_shell (channel);
-    if (rc < 0) {
-        goto failed;
-    }
-
-#endif
-
-    rbytes = ssh_channel_read(channel, buffer, sizeof(buffer), 0);
-    if (rbytes <= 0) {
-        goto failed;
-    }
-
-    do {
-        wbytes = fwrite(buffer + total, 1, rbytes, stdout);
-        if (wbytes <= 0) {
-            goto failed;
-        }
-
-        total += wbytes;
-
-        // When it was not possible to write the whole buffer to stdout 
-        if (wbytes < rbytes) {
-            rbytes -= wbytes;
-            continue;
-        }
-
-        rbytes = ssh_channel_read(channel, buffer, sizeof(buffer), 0);
-        total = 0;
-    } while (rbytes > 0);
-
-    if (rbytes < 0) {
-        goto failed;
-    }
-
-    ssh_channel_send_eof(channel);
-    ssh_channel_close(channel);
-    ssh_channel_free(channel);
-    ssh_disconnect(session);
-    ssh_free(session);
-    ssh_finalize();
-
-    return 0;
-failed:
-    ssh_channel_close(channel);
-    ssh_channel_free(channel);
-    ssh_disconnect(session);
-    ssh_free(session);
-    ssh_finalize();
-
-    return 1;
-}
-// EXAMPLE main FINISH

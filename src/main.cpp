@@ -6,16 +6,12 @@ const unsigned int configSTACK = 51200;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "libssh/priv.h"
-#include <libssh/libssh.h>
-#include "libssh_esp32.h"
-#include "libssh_esp32_config.h"
 #include "driver/uart.h"
 #include "esp_vfs_dev.h"
 #include "driver/gpio.h"
 #include "nvs_flash.h"
 #include "nvs.h"
-
+#include "esp_timer.h"
 //own header
 #include "pwrmgr.h"
 #include "ssh.h"
@@ -27,118 +23,12 @@ const unsigned int configSTACK = 51200;
 #define Blue_LED  5
 #define LED      21     // onboard blue led
 
-volatile bool wifiPhyConnected;
 
-// Timing and timeout configuration.
-#define WIFI_TIMEOUT_S 10
-#define NET_WAIT_MS 100
+EventGroupHandle_t s_wifi_event_group;
 
 
-// Networking state of this esp32 device.
-typedef enum
-{
-  STATE_NEW,
-  STATE_PHY_CONNECTED,
-  STATE_WAIT_IPADDR,
-  STATE_GOT_IPADDR,
-  STATE_CONNECT,
-  STATE_DONE
-} devState_t;
-
-static volatile devState_t devState;
-
-#define newDevState(s) (devState = s)
-
-esp_err_t event_cb(void *ctx, system_event_t *event)
-{
-  switch(event->event_id)
-  {
-    case SYSTEM_EVENT_STA_START:
-            printf("SYSTEM_EVENT_STA_START\n");
-      esp_wifi_connect();
-      break;
-    case SYSTEM_EVENT_STA_CONNECTED:
-         printf("SYSTEM_EVENT_STA_CONNECTED\n");
-      wifiPhyConnected = true;
-      if (devState < STATE_PHY_CONNECTED) newDevState(STATE_PHY_CONNECTED);
-      break;
-    case SYSTEM_EVENT_GOT_IP6:
-    case SYSTEM_EVENT_STA_GOT_IP:
-        printf("got ip\n");
-        newDevState(STATE_GOT_IPADDR);
-      break;
-    case SYSTEM_EVENT_STA_DISCONNECTED:
-      if (devState < STATE_WAIT_IPADDR) newDevState(STATE_NEW);
-      if (wifiPhyConnected)
-      {
-        wifiPhyConnected = false;
-      }
-      wifi_connect();
-      break;
-    default:
-      break;
-  }
-  return ESP_OK;
-}
-
-
-void controlTask(void *pvParameter)
-{
-
-  doorCMD_t state = *(doorCMD_t *) pvParameter;
-
-  if (ESP_OK == initSPIFFS()){
-    printf("sspifs init ok\n");
-    printSPIFFSinfo();
-  }
-  else{
-    printf("sspifs init failed\n");//no files, no key, just give up
-    enterDeepsleep();
-  }
-
-  wifiPhyConnected = false;
-  wifi_connect();
-
-  while (1)
-  {
-    switch (devState)
-    {
-      case STATE_NEW :
-    
-         printf("%%STATE_NEW\n");
-        vTaskDelay(NET_WAIT_MS / portTICK_PERIOD_MS);
-        break;
-      case STATE_PHY_CONNECTED :
-        printf("%%STATE_PHY_CONNECTED\n");
-        newDevState(STATE_WAIT_IPADDR);
-        break;
-      case STATE_WAIT_IPADDR :
-        vTaskDelay(NET_WAIT_MS / portTICK_PERIOD_MS);
-        break;
-      case STATE_GOT_IPADDR :
-            printf("%%STATE_GOT_IPADDR\n");
-        newDevState(STATE_CONNECT);
-        break;
-      case STATE_CONNECT :
-        printf("%%STATE_CONNECT\n");
-        libssh_begin();
-
-        {
-          int ex_rc = ex_main(state);
-          printf("\n%% Execution completed: rc=%d\n", ex_rc);
-        }
-        newDevState(STATE_DONE);
-      case STATE_DONE :
-          enterDeepsleep();
-      default:
-        break;
-    }
-  }
-
-  printf("this should never happen.\n");
-  vTaskDelete(NULL);
-}
-
+EventGroupHandle_t xEventGroup;
+int TASK_FINISH_BIT	= BIT4;
 
 void loop(void *pvParameter){
  while (1){
@@ -154,7 +44,7 @@ void loop(void *pvParameter){
 }
 
 extern "C" void app_main() {
-  devState = STATE_NEW;
+
   // Use the expected blocking I/O behavior.
   setvbuf(stdin, NULL, _IONBF, 0);
   setvbuf(stdout, NULL, _IONBF, 0);
@@ -165,10 +55,11 @@ extern "C" void app_main() {
   uart_driver_install ((uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
   esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
 
-  xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 3) , NULL);
+  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+  xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
   printf(esp_get_idf_version());
-
 
   doorCMD_t shackCMD = wakeSelector();
 
@@ -184,11 +75,42 @@ extern "C" void app_main() {
       printf("nvs_flash_init failed");
   }
 
- // esp_netif_init();
-  tcpip_adapter_init();
+  esp_netif_init();
+  wifi_init_sta();
 
-  esp_event_loop_init(event_cb, NULL);
-  xTaskCreatePinnedToCore(controlTask, "ctl", configSTACK, (void *) &shackCMD , (tskIDLE_PRIORITY + 3), NULL, portNUM_PROCESSORS - 1);
+  if (ESP_OK == initSPIFFS()){
+    printf("sspifs init ok\n");
+    printSPIFFSinfo();
+  }
+  else{
+    printf("sspifs init failed\n");//no files, no key, just give up
+    enterDeepsleep();
+  }
+
+  /* Wait for Wi-Fi connection */
+  xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
+
+  printf("starting ssh things\n");
+
+        
+    char line[256] = "date";//ssh command to execute
+    xEventGroup = xEventGroupCreate();// Create Eventgroup for ssh response
+    xEventGroupClearBits( xEventGroup, TASK_FINISH_BIT );
+          
+          //xTaskCreate(&ssh_task, "SSH", 1024*8, (void *) &line, 2, NULL);
+    xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &line , (tskIDLE_PRIORITY + 3), NULL, portNUM_PROCESSORS - 1);
+
+		// Wit for ssh finish.
+		xEventGroupWaitBits( xEventGroup,
+			TASK_FINISH_BIT,	/* The bits within the event group to wait for. */
+			pdTRUE,				/* HTTP_CLOSE_BIT should be cleared before returning. */
+			pdFALSE,			/* Don't wait for both bits, either bit will do. */
+			portMAX_DELAY);		/* Wait forever. */
+
+
+  printf("ssh done, sleep\n");
+  printf("uptime: %llums\n", (uint64_t) (esp_timer_get_time()/1000) );
+  enterDeepsleep();
 
   while (1){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
