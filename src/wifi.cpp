@@ -13,34 +13,7 @@
 #define EXAMPLE_ESP_MAXIMUM_RETRY  3
 
 /* FreeRTOS event group to signal when we are connected*/
-//extern EventGroupHandle_t s_wifi_event_group;
-
-void wifi_connect(){
-
-    const char *my_new_ssid = EXAMPLE_ESP_WIFI_SSID; //the new SSID to assign
-    const char *my_new_pass = EXAMPLE_ESP_WIFI_PASS; //the new SSID to assign
-
-    printf("connect connect\n");
-    wifi_config_t wifi_config = {};
-    
-    strncpy((char * )wifi_config.sta.ssid, (const char*) my_new_ssid, 32); //copy at max 32 bytes over
-    strncpy((char * )wifi_config.sta.password, (const char*) my_new_pass, 64); //copy at max 32 bytes over
-
-    // initialize the wifi stack in STAtion mode with config in RAM
-    wifi_init_config_t wifi_init_config = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&wifi_init_config));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    
-    //ESP_ERROR_CHECK( esp_wifi_disconnect() );
-    ESP_ERROR_CHECK( esp_wifi_set_config(WIFI_IF_STA, &wifi_config) );
-    ESP_ERROR_CHECK(esp_wifi_start());
-    //ESP_ERROR_CHECK( esp_wifi_connect() );
-}
-/*
-//===================== NEW SDK >4 =========================
-
-
+extern EventGroupHandle_t s_wifi_event_group;
 
 static const char *TAG = "wifi station";
 static int s_retry_num = 0;
@@ -133,4 +106,3 @@ void wifi_init_sta(void)
     }
 }
 
-*/
