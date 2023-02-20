@@ -39,10 +39,7 @@ static const char *TAG = "SSH";
 extern EventGroupHandle_t xEventGroup;
 extern int TASK_FINISH_BIT;
 
-#define CONFIG_SSH_USER "sam"
-#define CONFIG_SSH_PASSWORD ""
-#define CONFIG_SSH_PORT 8022
-#define CONFIG_SSH_HOST "over.voltage.nz"
+
 static int waitsocket(int socket_fd, LIBSSH2_SESSION *session)
 {
 	struct timeval timeout;
@@ -77,8 +74,8 @@ static int waitsocket(int socket_fd, LIBSSH2_SESSION *session)
 
 void ssh_task(void *pvParameters)
 {
-	char *task_parameter = (char *)pvParameters;
-	ESP_LOGI(TAG, "Start task_parameter=%s", task_parameter);
+	sshParameter *cfg = (sshParameter *)pvParameters;
+	ESP_LOGI(TAG, "SSH task_parameter:\n\t%s@%s:%u\n\tcmd:%s", cfg->username,cfg->hostname,cfg->port, cfg->cmd);
 
 	// SSH Staff
 	int sock;
@@ -87,28 +84,28 @@ void ssh_task(void *pvParameters)
 	LIBSSH2_CHANNEL *channel;
 
 	ESP_LOGI(TAG, "libssh2_version is %s", LIBSSH2_VERSION);
-	  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+	
 
 	int rc = libssh2_init(0);
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
 
 	if(rc) {
 		ESP_LOGE(TAG, "libssh2 initialization failed (%d)", rc);
 		while(1) { vTaskDelay(1); }
 	}
 
-	ESP_LOGI(TAG, "CONFIG_SSH_HOST=%s", CONFIG_SSH_HOST);
-	ESP_LOGI(TAG, "CONFIG_SSH_PORT=%d", CONFIG_SSH_PORT);
+	ESP_LOGI(TAG, "CONFIG_SSH_HOST=%s", cfg->hostname);
+	ESP_LOGI(TAG, "CONFIG_SSH_PORT=%d", cfg->port );
 	sin.sin_family = AF_INET;
 	//sin.sin_port = htons(22);
-	sin.sin_port = htons(CONFIG_SSH_PORT);
-	sin.sin_addr.s_addr = inet_addr(CONFIG_SSH_HOST);
+	sin.sin_port = htons(cfg->port );
+	sin.sin_addr.s_addr = inet_addr(cfg->hostname);
 	ESP_LOGI(TAG, "sin.sin_addr.s_addr=%lx", sin.sin_addr.s_addr);
 	if (sin.sin_addr.s_addr == 0xffffffff) {
 		struct hostent *hp;
-		hp = gethostbyname(CONFIG_SSH_HOST);
+		hp = gethostbyname(cfg->hostname);
 		if (hp == NULL) {
-			ESP_LOGE(TAG, "gethostbyname fail %s", CONFIG_SSH_HOST);
+			ESP_LOGE(TAG, "gethostbyname fail %s", cfg->hostname);
 			while(1) { vTaskDelay(1); }
 		}
 		struct ip4_addr *ip4_addr;
@@ -116,20 +113,20 @@ void ssh_task(void *pvParameters)
 		sin.sin_addr.s_addr = ip4_addr->addr;
 		ESP_LOGI(TAG, "sin.sin_addr.s_addr=%lx", sin.sin_addr.s_addr);
 	}
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(sock == -1) {
 		ESP_LOGE(TAG, "failed to create socket!");
 		while(1) { vTaskDelay(1); }
 	}
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
 
 	if(connect(sock, (struct sockaddr*)(&sin), sizeof(struct sockaddr_in)) != 0) {
 		ESP_LOGE(TAG, "failed to connect!");
 		while(1) { vTaskDelay(1); }
 	}
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
 
 	/* Create a session instance */
 	session = libssh2_session_init();
@@ -154,16 +151,10 @@ void ssh_task(void *pvParameters)
 		while(1) { vTaskDelay(1); }
 	}
 */
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
 
-	/* We could authenticate via privatekey */
-	char publickey[64];
-	char privatekey[64];
-	strcpy(publickey, "/spiffs/jetson.pub");
-	strcpy(privatekey, "/spiffs/jetson");
-	if(libssh2_userauth_publickey_fromfile(session, CONFIG_SSH_USER, publickey, privatekey, NULL)) {
+	if(libssh2_userauth_publickey_fromfile(session, cfg->username , cfg->publickey, cfg->privatekey, NULL)) {
 		ESP_LOGE(TAG, "Authentication by privatekey failed.");
-		ESP_LOGE(TAG, "Authentication username : [%s].", CONFIG_SSH_USER);
+		ESP_LOGE(TAG, "Authentication username : [%s].", cfg->username );
 		while(1) { vTaskDelay(1); }
 	}
 
@@ -179,14 +170,21 @@ void ssh_task(void *pvParameters)
 		ESP_LOGE(TAG, "libssh2_channel_open_session failed.");
 		while(1) { vTaskDelay(1); }
 	}
-
-	while((rc = libssh2_channel_exec(channel, task_parameter)) == LIBSSH2_ERROR_EAGAIN)
-	waitsocket(sock, session);
-	if(rc != 0) {
-		ESP_LOGE(TAG, "libssh2_channel_exec failed: %d", rc);
-		while(1) { vTaskDelay(1); }
+	if ( '\0' == cfg->cmd[0]) {
+		while((rc = libssh2_channel_exec(channel, cfg->cmd)) == LIBSSH2_ERROR_EAGAIN)
+		waitsocket(sock, session);
+		if(rc != 0) {
+			ESP_LOGE(TAG, "libssh2_channel_exec failed: %d", rc);
+			while(1) { vTaskDelay(1); }
+		}
 	}
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+	else{ //no cmd just open a shell
+		rc = libssh2_channel_shell (channel);
+		if (rc < 0) {
+			ESP_LOGE(TAG, "ssh_channel_request_shell failed: %d", rc);
+			while(1) { vTaskDelay(1); }
+		}
+	}
 
 	int bytecount = 0;
 	for(;;) {
@@ -222,7 +220,7 @@ void ssh_task(void *pvParameters)
 	} // end for
 	printf("\n");
 
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
 
 	int exitcode = 127;
 	char *exitsignal = (char *)"none";
@@ -253,11 +251,9 @@ void ssh_task(void *pvParameters)
 
 	// Close socket
 	close(sock);
-	ESP_LOGI(TAG, "[%s] done", task_parameter);
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+	ESP_LOGI(TAG, "[%s] done", cfg->cmd );
 
 	libssh2_exit();
-  printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
 
 	xEventGroupSetBits( xEventGroup, TASK_FINISH_BIT );
 	vTaskDelete( NULL );

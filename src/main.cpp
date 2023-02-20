@@ -12,6 +12,7 @@ const unsigned int configSTACK = 51200;
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "esp_timer.h"
+#include "esp_log.h"
 //own header
 #include "pwrmgr.h"
 #include "ssh.h"
@@ -31,19 +32,26 @@ EventGroupHandle_t xEventGroup;
 int TASK_FINISH_BIT	= BIT4;
 
 void loop(void *pvParameter){
- while (1){
-    if (esp_timer_get_time() > 30*1000*1000){//uptime > 30 sec 
-      
-      printflashinfo();
+  while (1){
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    if (esp_timer_get_time() > 45*1000*1000){//uptime > 30 sec 
       printf("took too long\n");
       enterDeepsleep();
     } 
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    printf(".");
-    }
+  }
 }
 
 extern "C" void app_main() {
+
+  sshParameter cfg = {
+    .username = "close",
+    .hostname = "portal.shackspace.de",
+    .port = 22,
+    .password = {'\0'},
+    .publickey = "/spiffs/key.pub",
+    .privatekey = "/spiffs/key",
+    .cmd = {'\0'},
+  };
 
   // Use the expected blocking I/O behavior.
   setvbuf(stdin, NULL, _IONBF, 0);
@@ -55,19 +63,18 @@ extern "C" void app_main() {
   uart_driver_install ((uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
   esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
 
+  esp_log_level_set("SSH", ESP_LOG_INFO);
+
   printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
 
   xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
   printf(esp_get_idf_version());
 
-  doorCMD_t shackCMD = wakeSelector();
-
-  switch (shackCMD){
-    case CMD_UNKNOWN:   printf("UNKNOWN!\n");  enterDeepsleep();  break;
-    case CMD_OPEN:      printf("OPEN!\n");   break;
-    case CMD_CLOSE:     printf("CLOSE!\n");   break;
-    default:  break;
+  switch (wakeSelector()){
+    case CMD_OPEN:    printf("OPEN!\n");     strcpy(cfg.username , "open-front");   break;
+    case CMD_CLOSE:   printf("CLOSE!\n");    strcpy(cfg.username, "close");  break;
+    default:          printf("UNKNOWN!\n");  enterDeepsleep();   break;
   }
 
   esp_err_t err = nvs_flash_init();
@@ -93,19 +100,18 @@ extern "C" void app_main() {
   printf("starting ssh things\n");
 
         
-    char line[256] = "date";//ssh command to execute
-    xEventGroup = xEventGroupCreate();// Create Eventgroup for ssh response
-    xEventGroupClearBits( xEventGroup, TASK_FINISH_BIT );
-          
-          //xTaskCreate(&ssh_task, "SSH", 1024*8, (void *) &line, 2, NULL);
-    xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &line , (tskIDLE_PRIORITY + 3), NULL, portNUM_PROCESSORS - 1);
+xEventGroup = xEventGroupCreate();// Create Eventgroup for ssh response
+xEventGroupClearBits( xEventGroup, TASK_FINISH_BIT );
+      
+      //xTaskCreate(&ssh_task, "SSH", 1024*8, (void *) &line, 2, NULL);
+xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &cfg , tskIDLE_PRIORITY , NULL, portNUM_PROCESSORS - 1);
 
-		// Wit for ssh finish.
-		xEventGroupWaitBits( xEventGroup,
-			TASK_FINISH_BIT,	/* The bits within the event group to wait for. */
-			pdTRUE,				/* HTTP_CLOSE_BIT should be cleared before returning. */
-			pdFALSE,			/* Don't wait for both bits, either bit will do. */
-			portMAX_DELAY);		/* Wait forever. */
+// Wit for ssh finish.
+xEventGroupWaitBits( xEventGroup,
+  TASK_FINISH_BIT,	/* The bits within the event group to wait for. */
+  pdTRUE,				/* HTTP_CLOSE_BIT should be cleared before returning. */
+  pdFALSE,			/* Don't wait for both bits, either bit will do. */
+  portMAX_DELAY);		/* Wait forever. */
 
 
   printf("ssh done, sleep\n");
