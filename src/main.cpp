@@ -41,6 +41,22 @@ void loop(void *pvParameter){
   }
 }
 
+
+void SetupMode (void *pvParameter){
+
+  esp_log_level_set("wifi", ESP_LOG_DEBUG);
+
+  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  wifi_init_softap();
+
+  while (1){
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
+    printf("setup-mode\n");
+  }
+
+}
+
+
 extern "C" void app_main() {
 
   sshParameter cfg = {
@@ -71,16 +87,23 @@ extern "C" void app_main() {
 
   printf(esp_get_idf_version());
 
-  switch (wakeSelector()){
-    case CMD_OPEN:    printf("OPEN!\n");     strcpy(cfg.username , "open-front");   break;
-    case CMD_CLOSE:   printf("CLOSE!\n");    strcpy(cfg.username, "close");  break;
-    default:          printf("UNKNOWN!\n");  enterDeepsleep();   break;
-  }
-
   esp_err_t err = nvs_flash_init();
   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
       printf("nvs_flash_init failed");
   }
+
+  switch (wakeSelector()){
+    case CMD_OPEN:    printf("OPEN!\n");     strcpy(cfg.username , "open-front");   break;
+    case CMD_CLOSE:   printf("CLOSE!\n");    strcpy(cfg.username, "close");  break;
+    default:          
+      printf("UNKNOWN!\n");  
+      xTaskCreate(SetupMode, "setup", 1024*4, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
+      while(1){ vTaskDelay(1000 / portTICK_PERIOD_MS); };
+        enterDeepsleep(); 
+      break;
+  }
+
+
 
   esp_netif_init();
   wifi_init_sta();
