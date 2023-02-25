@@ -18,6 +18,8 @@ const unsigned int configSTACK = 51200;
 #include "ssh.h"
 #include "sspiffs.h"
 #include "wifi.h"
+#include "webserver.h"
+#include "dns_server.h"
 
 #define Red_LED   3    // rgb led pins, active low
 #define Green_LED 4
@@ -32,12 +34,15 @@ EventGroupHandle_t xEventGroup;
 int TASK_FINISH_BIT	= BIT4;
 
 void loop(void *pvParameter){
+
   while (1){
     vTaskDelay(100 / portTICK_PERIOD_MS);
-    if (esp_timer_get_time() > 45*1000*1000){//uptime > 30 sec 
+
+    if ((esp_timer_get_time() > 45*1000*1000)){//uptime > 30 sec 
       printf("took too long\n");
       enterDeepsleep();
     } 
+
   }
 }
 
@@ -48,6 +53,9 @@ void SetupMode (void *pvParameter){
 
   vTaskDelay(5000 / portTICK_PERIOD_MS);
   wifi_init_softap();
+
+  start_webserver();
+  start_dns_server();
 
   while (1){
     vTaskDelay(3000 / portTICK_PERIOD_MS);
