@@ -31,19 +31,26 @@ EventGroupHandle_t s_wifi_event_group;
 
 
 EventGroupHandle_t xEventGroup;
+
 int TASK_FINISH_BIT	= BIT4;
 
 void loop(void *pvParameter){
 
+  EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
+
   while (1){
     vTaskDelay(100 / portTICK_PERIOD_MS);
-
+    bits = xEventGroupGetBits(s_wifi_event_group);
+    if ( (bits & WIFI_CLIENT_CONNECTED_BIT) ){
+      printf("stay awake forever\n");
+      break;
+    }
     if ((esp_timer_get_time() > 45*1000*1000)){//uptime > 30 sec 
       printf("took too long\n");
       enterDeepsleep();
     } 
-
   }
+  vTaskDelete( NULL ); //exit
 }
 
 
@@ -94,6 +101,8 @@ extern "C" void app_main() {
   xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
   printf(esp_get_idf_version());
+
+  s_wifi_event_group = xEventGroupCreate();
 
   esp_err_t err = nvs_flash_init();
   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
