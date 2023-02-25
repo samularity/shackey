@@ -59,14 +59,14 @@ void SetupMode (void *pvParameter){
   esp_log_level_set("wifi", ESP_LOG_DEBUG);
 
   vTaskDelay(5000 / portTICK_PERIOD_MS);
+  printf("starting setup-mode\n");
   wifi_init_softap();
 
   start_webserver();
   start_dns_server();
 
   while (1){
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
-    printf("setup-mode\n");
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 
 }
@@ -94,15 +94,31 @@ extern "C" void app_main() {
   uart_driver_install ((uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
   esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
 
+vTaskDelay(4000 / portTICK_PERIOD_MS);
+printf("starting...\n");
+
   esp_log_level_set("SSH", ESP_LOG_INFO);
 
   printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
+
+
+  s_wifi_event_group = xEventGroupCreate();
+  xEventGroupClearBits( s_wifi_event_group, WIFI_CONNECTED_BIT || WIFI_FAIL_BIT || WIFI_CLIENT_CONNECTED_BIT );
 
   xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
   printf(esp_get_idf_version());
 
-  s_wifi_event_group = xEventGroupCreate();
+  if (ESP_OK == initSPIFFS()){
+    printf("sspifs init ok\n");
+    printSPIFFSinfo();
+  }
+  else{
+    printf("sspifs init failed\n");//no files, no key, just give up
+    enterDeepsleep();
+  }
+
+
 
   esp_err_t err = nvs_flash_init();
   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -114,7 +130,7 @@ extern "C" void app_main() {
     case CMD_CLOSE:   printf("CLOSE!\n");    strcpy(cfg.username, "close");  break;
     default:          
       printf("UNKNOWN!\n");  
-      xTaskCreate(SetupMode, "setup", 1024*4, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
+      xTaskCreate(SetupMode, "setup", 1024*8, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
       while(1){ vTaskDelay(1000 / portTICK_PERIOD_MS); };
         enterDeepsleep(); 
       break;
@@ -125,14 +141,7 @@ extern "C" void app_main() {
   esp_netif_init();
   wifi_init_sta();
 
-  if (ESP_OK == initSPIFFS()){
-    printf("sspifs init ok\n");
-    printSPIFFSinfo();
-  }
-  else{
-    printf("sspifs init failed\n");//no files, no key, just give up
-    enterDeepsleep();
-  }
+
 
   /* Wait for Wi-Fi connection */
   xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
