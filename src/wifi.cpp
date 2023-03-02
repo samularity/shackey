@@ -137,12 +137,12 @@ void wifi_init_softap(void)
 
     wifi_config_t wifi_config = {
         .ap = {
-            .ssid = EXAMPLE_ESP_WIFI_SSID,
+            .ssid = "shackey",
             .password = EXAMPLE_ESP_WIFI_PASS,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+            .ssid_len = strlen("shackey"),
             .channel = 1,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK,
-            .max_connection = 5,
+            .max_connection = 3,
             .pmf_cfg = {
                     .required = false,
             },
@@ -166,5 +166,5 @@ void wifi_init_softap(void)
 
 
     ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, 1);
+             wifi_config.ap.ssid , "no passwd", 1);
 }
