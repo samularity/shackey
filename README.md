@@ -16,27 +16,26 @@ It's main (and only goal) is to open or close the [shackspace portal](https://gi
 
 ```mermaid
 graph TD
-    NodeS((Deepsleep)) --> wakeup -- wakup-source --> NodeW{select} 
+    NodeStart((deepsleep)) --> wakeup -- wakup-source --> NodeWAKE{ } 
 
-    wakeup -- enable --> NodeT{{45sec Timer}} -. Timeout .-> NodeZ
-
-
-    NodeW -->|BtnRst + Btn1| setup-mode --> StartAP --> NodeF["wait for Connecetion"] --> NodeC[ connected] 
-    NodeF --> NodeF
-    NodeC -- disable --> NodeT
-
-    NodeW -->|Btn1| open --> NodeA["Connect to Wifi"] -- connected --> NodeB["ssh cmd open"] --> NodeH["get response"] --> NodeZ
-    NodeA-->NodeA
-
-    NodeW -->|Btn2| close --> NodeD["Connect to Wifi"] -- connected --> NodeE["ssh cmd close"] --> NodeG["get response"] --> NodeZ
-    NodeD-->NodeD
-
-    NodeW -->|BtnRst| NodeZ  
+    wakeup -- enable --> NodeTimer{{45sec watchdog timer}} -. Timeout .-> NodeZZZ
 
 
+    NodeWAKE -->|BtnRst + Btn1| NodeK(["setup-mode"]) -->  NodeClient
+    NodeClient --> NodeClient
+    NodeClient["wait for client"] --> connected -- disable --> NodeTimer
 
-    NodeZ((Deepsleep))
 
+    NodeWAKE -->|Btn1| NodeJ([open]) -- set cmd=open--> NodeWIFI
+    NodeWAKE -->|Btn2| NodeI([close]) -- set cmd=close--> NodeWIFI
+
+    NodeWIFI["connect to wifi"] -- connected --> NodeCMD["ssh cmd"] -- got response --> NodeZZZ
+    NodeWIFI-->NodeWIFI
+    NodeCMD --> NodeCMD
+
+    NodeWAKE -->|BtnRst| NodeZZZ  
+
+    NodeZZZ((deepsleep))
 ```
 
 
