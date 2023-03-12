@@ -56,19 +56,15 @@ void loop(void *pvParameter){
 
 void SetupMode (void *pvParameter){
 
-  esp_log_level_set("wifi", ESP_LOG_DEBUG);
+  //esp_log_level_set("wifi", ESP_LOG_DEBUG);
 
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
-  printf("starting setup-mode\n");
   wifi_init_softap();
-
   start_webserver();
   start_dns_server();
 
   while (1){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
-
 }
 
 
@@ -88,13 +84,20 @@ extern "C" void app_main() {
   setvbuf(stdin, NULL, _IONBF, 0);
   setvbuf(stdout, NULL, _IONBF, 0);
 
+  //GPIO-INIT
   gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
   gpio_set_level(GPIO_NUM_3, 0); //set red led on
+
+  gpio_set_direction(GPIO_NUM_2, GPIO_MODE_INPUT);
+  gpio_set_direction(GPIO_NUM_4, GPIO_MODE_INPUT);
+
+  gpio_set_pull_mode (GPIO_NUM_2,GPIO_PULLDOWN_ONLY);
+  gpio_set_pull_mode (GPIO_NUM_2,GPIO_PULLDOWN_ONLY);
 
   uart_driver_install ((uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
   esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
 
-vTaskDelay(4000 / portTICK_PERIOD_MS);
+//vTaskDelay(4000 / portTICK_PERIOD_MS);
 printf("starting...\n");
 
   esp_log_level_set("SSH", ESP_LOG_INFO);
@@ -107,8 +110,6 @@ printf("starting...\n");
 
   xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
-  printf(esp_get_idf_version());
-
   if (ESP_OK == initSPIFFS()){
     printf("sspifs init ok\n");
     printSPIFFSinfo();
@@ -118,49 +119,43 @@ printf("starting...\n");
     enterDeepsleep();
   }
 
-
-
   esp_err_t err = nvs_flash_init();
   if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
       printf("nvs_flash_init failed");
   }
 
   switch (wakeSelector()){
-    case CMD_OPEN:    printf("OPEN!\n");     strcpy(cfg.username , "open-front");   break;
-    case CMD_CLOSE:   printf("CLOSE!\n");    strcpy(cfg.username, "close");  break;
+    case CMD_OPEN:  strcpy(cfg.username , "open-front");  break;
+    case CMD_CLOSE: strcpy(cfg.username, "close");        break;
     default:          
-      printf("UNKNOWN!\n");  
-      xTaskCreate(SetupMode, "setup", 1024*8, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
-      while(1){ vTaskDelay(1000 / portTICK_PERIOD_MS); };
-        enterDeepsleep(); 
+      printf("UNKNOWN!\n");
+      if (1 == gpio_get_level(GPIO_NUM_2)){
+        xTaskCreate(SetupMode, "setup", 1024*8, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
+        while (1){ vTaskDelay(1000 / portTICK_PERIOD_MS); } //idle forever
+      }
+      enterDeepsleep(); 
       break;
   }
 
-
-
   esp_netif_init();
   wifi_init_sta();
-
-
 
   /* Wait for Wi-Fi connection */
   xEventGroupWaitBits(s_wifi_event_group, WIFI_CONNECTED_BIT, false, true, portMAX_DELAY);
 
   printf("starting ssh things\n");
 
-        
-xEventGroup = xEventGroupCreate();// Create Eventgroup for ssh response
-xEventGroupClearBits( xEventGroup, TASK_FINISH_BIT );
+  xEventGroup = xEventGroupCreate();// Create Eventgroup for ssh response
+  xEventGroupClearBits( xEventGroup, TASK_FINISH_BIT );
       
-      //xTaskCreate(&ssh_task, "SSH", 1024*8, (void *) &line, 2, NULL);
-xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &cfg , tskIDLE_PRIORITY , NULL, portNUM_PROCESSORS - 1);
+  xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &cfg , tskIDLE_PRIORITY , NULL, portNUM_PROCESSORS - 1);
 
-// Wit for ssh finish.
-xEventGroupWaitBits( xEventGroup,
-  TASK_FINISH_BIT,	/* The bits within the event group to wait for. */
-  pdTRUE,				/* HTTP_CLOSE_BIT should be cleared before returning. */
-  pdFALSE,			/* Don't wait for both bits, either bit will do. */
-  portMAX_DELAY);		/* Wait forever. */
+  // Wit for ssh finish.
+  xEventGroupWaitBits( xEventGroup,
+    TASK_FINISH_BIT,	/* The bits within the event group to wait for. */
+    pdTRUE,				/* HTTP_CLOSE_BIT should be cleared before returning. */
+    pdFALSE,			/* Don't wait for both bits, either bit will do. */
+    portMAX_DELAY);		/* Wait forever. */
 
 
   printf("ssh done, sleep\n");
