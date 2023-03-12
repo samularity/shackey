@@ -85,14 +85,21 @@ extern "C" void app_main() {
   setvbuf(stdout, NULL, _IONBF, 0);
 
   //GPIO-INIT
-  gpio_set_direction(GPIO_NUM_3, GPIO_MODE_OUTPUT);
-  gpio_set_level(GPIO_NUM_3, 0); //set red led on
 
-  gpio_set_direction(GPIO_NUM_2, GPIO_MODE_INPUT);
-  gpio_set_direction(GPIO_NUM_4, GPIO_MODE_INPUT);
+  //configure inputs
+	gpio_config_t io_conf;
+	io_conf.intr_type = GPIO_INTR_DISABLE;
+	io_conf.mode = GPIO_MODE_INPUT;
+	io_conf.pin_bit_mask = ((1ULL<<GPIO_NUM_2) | (1ULL<<GPIO_NUM_4));
+	io_conf.pull_down_en = GPIO_PULLDOWN_ENABLE;
+	io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+	gpio_config(&io_conf);
 
-  gpio_set_pull_mode (GPIO_NUM_2,GPIO_PULLDOWN_ONLY);
-  gpio_set_pull_mode (GPIO_NUM_2,GPIO_PULLDOWN_ONLY);
+  //configure outputs
+	io_conf.mode = GPIO_MODE_OUTPUT;
+	io_conf.pin_bit_mask = (1ULL<<GPIO_NUM_3);
+	io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+	gpio_config(&io_conf);
 
   uart_driver_install ((uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
   esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
