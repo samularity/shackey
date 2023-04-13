@@ -26,3 +26,12 @@ jobs:
 
       - name: Build PlatformIO Project
         run: pio run
+
+      - name: get short hash
+        id: vars
+        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: firmware-${{ steps.vars.outputs.sha_short }}.bin
+          path: .pio/build/esp32-c3-devkitm-1/firmware.bin
