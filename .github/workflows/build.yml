@@ -1,6 +1,10 @@
 name: shackey CI
 
-on: [push]
+on: 
+  push:
+  schedule:
+    - cron: '24 12 * * 2,5'
+#when new src and at 12:24 on Tuesday and Friday.
 
 jobs:
   build:
