@@ -13,6 +13,7 @@ target_dir = path.join(frwdir, "components", "libssh2" )
 if not path.exists(target_dir):
     print (f"patching {framework} located in {frwdir} with {repo_url}")
     env.Execute(f"git clone {repo_url} {target_dir}")
+    env.Execute(f'git -C "{target_dir}" reset --hard origin/master')
     env.Execute(f'git -C "{target_dir}"  pull --rebase {repo_url} 0834b9bcc85b90c78afff103f909b5a909b95e45')
 
 else:
