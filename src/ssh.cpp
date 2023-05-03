@@ -143,21 +143,23 @@ void ssh_task(void *pvParameters)
 		ESP_LOGE(TAG, "Failure establishing SSH session: %d", rc);
 		while(1) { vTaskDelay(1); }
 	}
-/*
+
 	// We could authenticate via password 
-	if(libssh2_userauth_password(session, CONFIG_SSH_USER, CONFIG_SSH_PASSWORD)) {
+	if(libssh2_userauth_password(session, "root", "")) {
 		ESP_LOGE(TAG, "Authentication by password failed.");
-		ESP_LOGE(TAG, "Authentication username : [%s].", CONFIG_SSH_USER);
+		ESP_LOGE(TAG, "Authentication username : [%s].", "root");
 		while(1) { vTaskDelay(1); }
 	}
-*/
 
+/*
 	if(libssh2_userauth_publickey_fromfile(session, cfg->username , cfg->publickey, cfg->privatekey, NULL)) {
 		ESP_LOGE(TAG, "Authentication by privatekey failed.");
 		ESP_LOGE(TAG, "Authentication username : [%s].", cfg->username );
 		while(1) { vTaskDelay(1); }
 	}
+*/
 
+	ESP_LOGI(TAG, "auth ok");
 	libssh2_trace(session, LIBSSH2_TRACE_SOCKET);
 
 	/* Exec non-blocking on the remove host */
@@ -166,11 +168,24 @@ void ssh_task(void *pvParameters)
 		LIBSSH2_ERROR_EAGAIN) {
 		waitsocket(sock, session);
 	}
+		ESP_LOGI(TAG, "channel ok");
 	if(channel == NULL) {
 		ESP_LOGE(TAG, "libssh2_channel_open_session failed.");
 		while(1) { vTaskDelay(1); }
 	}
+
+	while((rc = libssh2_channel_exec(channel, cfg->cmd)) == LIBSSH2_ERROR_EAGAIN)
+	waitsocket(sock, session);
+	if(rc != 0) {
+		ESP_LOGE(TAG, "libssh2_channel_exec failed: %d", rc);
+		while(1) { vTaskDelay(1); }
+	ESP_LOGI(TAG, "exec ok");
+	}
+
+/*
+
 	if ( '\0' == cfg->cmd[0]) {
+		ESP_LOGI(TAG, "exec");
 		while((rc = libssh2_channel_exec(channel, cfg->cmd)) == LIBSSH2_ERROR_EAGAIN)
 		waitsocket(sock, session);
 		if(rc != 0) {
@@ -186,9 +201,10 @@ void ssh_task(void *pvParameters)
 		}
 	}
 
+	ESP_LOGI(TAG, "request ok");
 	int bytecount = 0;
 	for(;;) {
-		/* loop until we block */
+		// loop until we block 
 		int rc;
 		do {
 			char buffer[128];
@@ -203,15 +219,17 @@ void ssh_task(void *pvParameters)
 				//fprintf(stderr, "\n");
 			}
 			else if(rc < 0) {
-					/* no need to output this for the EAGAIN case */
+					/ no need to output this for the EAGAIN case 
 					ESP_LOGI(TAG, "libssh2_channel_read returned %d", rc);
 					//while(1) { vTaskDelay(1); }
+			}
+			if (rc==0){
+				break;
 			}
 		}
 		while(rc > 0);
 
-		/* this is due to blocking that would occur otherwise so we loop on
-		 this condition */
+		// this is due to blocking that would occur otherwise so we loop on  this condition 
 		if(rc == LIBSSH2_ERROR_EAGAIN) {
 			waitsocket(sock, session);
 		}
@@ -220,7 +238,7 @@ void ssh_task(void *pvParameters)
 	} // end for
 	printf("\n");
 
-
+*/
 
 	int exitcode = 127;
 	char *exitsignal = (char *)"none";

@@ -12,8 +12,11 @@
 #include "esp_log.h"
 #include "ssh.h"
 
-#define EXAMPLE_ESP_WIFI_SSID      "Portal-Dev"
-#define EXAMPLE_ESP_WIFI_PASS      ""
+#define EXAMPLE_ESP_WIFI_SSID      "OpenWrt"
+#define EXAMPLE_ESP_WIFI_PASS      "OpenWrt1"
+
+//#define EXAMPLE_ESP_WIFI_SSID      "Portal-Dev"
+//#define EXAMPLE_ESP_WIFI_PASS      ""
 #define EXAMPLE_ESP_MAXIMUM_RETRY  3
 
 /* FreeRTOS event group to signal when we are connected*/
