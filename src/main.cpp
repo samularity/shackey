@@ -66,16 +66,20 @@ int TASK_FINISH_BIT	= BIT4;
 
 void loop(void *pvParameter){
 
-  EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
+  vTaskDelay(1000 / portTICK_PERIOD_MS);//wait 1 second to make sure buttons are released after setup-mode
 
+ 
   while (1){
     vTaskDelay(100 / portTICK_PERIOD_MS);
-    bits = xEventGroupGetBits(s_wifi_event_group);
-    if ( (bits & WIFI_CLIENT_CONNECTED_BIT) ){
-      printf("stay awake forever\n");
-      break;
+
+    if (1 == gpio_get_level(GPIO_SW_OPEN) &&  1 == gpio_get_level(GPIO_SW_CLOSE) ) {
+      //abort whatever is going on
+      printf("abort!\n");
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+      enterDeepsleep();
     }
-    if ((esp_timer_get_time() > 45*1000*1000)){//uptime > 30 sec 
+
+    if ((esp_timer_get_time() > 25*1000*1000)){//uptime > 30 sec 
       printf("took too long\n");
       enterDeepsleep();
     } 
@@ -87,6 +91,7 @@ void loop(void *pvParameter){
 void SetupMode (void *pvParameter){
 
   //esp_log_level_set("wifi", ESP_LOG_DEBUG);
+ EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
 
   wifi_init_softap();
   start_webserver();
@@ -94,6 +99,12 @@ void SetupMode (void *pvParameter){
 
   while (1){
     vTaskDelay(1000 / portTICK_PERIOD_MS);
+    printf("setup-mode\n");
+    bits = xEventGroupGetBits(s_wifi_event_group);
+    if ( (bits & WIFI_CLIENT_CONNECTED_BIT) ){
+      printf("stay awake forever\n");
+      break;
+    }
   }
 }
 
@@ -139,7 +150,7 @@ extern "C" void app_main() {
 
 //Disable all LEDs
 
-  gpio_set_level(GPIO_LED2_BLUE, 1);
+  gpio_set_level(GPIO_LED2_BLUE, 0); //start led
   gpio_set_level(GPIO_LED1_RED, 1);
   gpio_set_level(GPIO_LED1_GREEN, 1);
   gpio_set_level(GPIO_LED1_BLUE, 1);
@@ -167,17 +178,12 @@ extern "C" void app_main() {
         .channel        = LEDC_CHANNEL,
         .intr_type      = LEDC_INTR_DISABLE,
         .timer_sel      = LEDC_TIMER,
-        .duty           = 0, // Set duty to 0%
-        .hpoint         = 0
+        .duty           = 0, // Set duty to 0%  //[0, (2**duty_resolution) - 1] 
+        .hpoint         = 0,
+        .flags          = 1
     };
 
   ledc_channel_config(&ledc_channel);
-
-  ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 450);
-  ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
-
-  gpio_set_level(GPIO_LED1_RED, 0);
-  gpio_set_level(GPIO_LED2_RED, 0);
 
   printf("starting...\n");
 
@@ -206,16 +212,22 @@ extern "C" void app_main() {
   }
 
   switch (wakeSelector()){   
-      case CMD_OPEN:  strcpy(cfg.username , "open-front");  printf("ssh cmd open\n"); break;
-      case CMD_CLOSE: strcpy(cfg.username, "close");  printf("ssh cmd stop\n");   break;
+      case CMD_OPEN:  
+          strcpy(cfg.username , "open-front");
+          printf("ssh cmd open\n"); 
+          ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, 450);
+          ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+          break;
+      case CMD_CLOSE: 
+          strcpy(cfg.username, "close");  
+          printf("ssh cmd stop\n");   
+          gpio_set_level(GPIO_LED1_RED, 0);
+          break;
       default:     
-        printf("UNKNOWN!\n");
-          gpio_set_level(GPIO_LED2_BLUE, 0);
-        if (1 == gpio_get_level(GPIO_SW_OPEN)){
-          xTaskCreate(SetupMode, "setup", 1024*8, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
-          while(1) {vTaskDelay(10000 / portTICK_PERIOD_MS);}  //idle forever
-        }
-        enterDeepsleep();
+        printf("UNKNOWN!/Setup-Mode\n");
+        gpio_set_level(GPIO_LED1_BLUE, 0);
+        xTaskCreate(SetupMode, "setup", 1024*8, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
+        while(1) {vTaskDelay(10000 / portTICK_PERIOD_MS);}  //idle forever, deep sleep is entered in loop task
       break;
   }
 
@@ -232,7 +244,7 @@ extern "C" void app_main() {
       
   xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &cfg , tskIDLE_PRIORITY , NULL, portNUM_PROCESSORS - 1);
 
-  // Wit for ssh finish.
+  // Wait for ssh finish.
   xEventGroupWaitBits( xEventGroup,
     TASK_FINISH_BIT,	/* The bits within the event group to wait for. */
     pdTRUE,				/* HTTP_CLOSE_BIT should be cleared before returning. */

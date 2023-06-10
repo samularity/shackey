@@ -21,7 +21,7 @@ graph TD
     wakeup -- enable --> NodeTimer{{45sec watchdog timer}} -. Timeout .-> NodeZZZ
 
 
-    NodeWAKE -->|BtnRst + Btn1| NodeK(["setup-mode"]) -->  NodeClient
+    NodeWAKE -->|"BtnRst || Btn1+2"| NodeK(["setup-mode"]) -->  NodeClient
     NodeClient --> NodeClient
     NodeClient["wait for client"] --> connected -- disable --> NodeTimer
 
