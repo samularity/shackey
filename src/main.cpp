@@ -64,7 +64,7 @@ EventGroupHandle_t xEventGroup;
 
 int TASK_FINISH_BIT	= BIT4;
 
-void loop(void *pvParameter){
+void TimeoutLoop(void *pvParameter){
 
   vTaskDelay(1000 / portTICK_PERIOD_MS);//wait 1 second to make sure buttons are released after setup-mode
 
@@ -79,9 +79,15 @@ void loop(void *pvParameter){
       enterDeepsleep();
     }
 
-    if ((esp_timer_get_time() > 25*1000*1000)){//uptime > 30 sec 
-      printf("took too long\n");
-      enterDeepsleep();
+    if ((esp_timer_get_time() > 45*1000*1000)){//uptime > 45 sec 
+      //check if we are in setup mode and a client is connected
+      if ( (xEventGroupGetBits(s_wifi_event_group) & WIFI_CLIENT_CONNECTED_BIT) ){
+        printf("stay awake forever\n");
+      }
+      else{
+        printf("took too long\n");
+        enterDeepsleep();
+      }
     } 
   }
   vTaskDelete( NULL ); //exit
@@ -91,26 +97,17 @@ void loop(void *pvParameter){
 void SetupMode (void *pvParameter){
 
   //esp_log_level_set("wifi", ESP_LOG_DEBUG);
- EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
-
   wifi_init_softap();
   start_webserver();
   start_dns_server();
 
-  while (1){
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    printf("setup-mode\n");
-    bits = xEventGroupGetBits(s_wifi_event_group);
-    if ( (bits & WIFI_CLIENT_CONNECTED_BIT) ){
-      printf("stay awake forever\n");
-      break;
-    }
-  }
+  //idle forever, exit is handled in TimeoutLoop
+  while (1){ vTaskDelay(1000 / portTICK_PERIOD_MS); }
 }
 
 
 extern "C" void app_main() {
-
+  
   sshParameter cfg = {
     .username = "close",
     .hostname = "portal.shackspace.de",
@@ -191,11 +188,10 @@ extern "C" void app_main() {
 
   printf("%s:%d: %llums\n",__FILE__ , __LINE__ , (uint64_t) (esp_timer_get_time()/1000) );
 
-
   s_wifi_event_group = xEventGroupCreate();
   xEventGroupClearBits( s_wifi_event_group, WIFI_CONNECTED_BIT || WIFI_FAIL_BIT || WIFI_CLIENT_CONNECTED_BIT );
 
-  xTaskCreate(loop, "loop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
+  xTaskCreate(TimeoutLoop, "TimeoutLoop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
   if (ESP_OK == initSPIFFS()){
     printf("sspifs init ok\n");
@@ -227,7 +223,7 @@ extern "C" void app_main() {
         printf("UNKNOWN!/Setup-Mode\n");
         gpio_set_level(GPIO_LED1_BLUE, 0);
         xTaskCreate(SetupMode, "setup", 1024*8, NULL, (tskIDLE_PRIORITY + 1) , NULL); 
-        while(1) {vTaskDelay(10000 / portTICK_PERIOD_MS);}  //idle forever, deep sleep is entered in loop task
+        while(1) {vTaskDelay(10000 / portTICK_PERIOD_MS);}  //idle forever, deep sleep is entered in TimeoutLoop task
       break;
   }
 
