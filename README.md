@@ -4,7 +4,12 @@
 
 It's main (and only goal) is to open or close the [shackspace portal](https://github.com/shackspace/portal300) with a button press on a keychain device. 
 
+### $\color{#D29922}\textsf{\Large\&#x26A0;\kern{0.2cm}\normalsize  !! Hardware-Issues !! \Large\&#x26A0; }$ 
 
+- LED2 Green is on in DeepSleep FIX: Remove R7
+- U4 XB6042J2SV-L is not working as expected
+    - FIX: Bridge B_GND and GND
+    - !Warning! This disables undervoltage protection
 
 ### How it works
 
@@ -63,6 +68,13 @@ graph TD
 |  5 | GPIO1 / XTAL_32K_N   | LED2 Blue    |
 | 28 | GPIO21 / U0TXD       | TX-Testpin   |
 |  7 | Chip_EN              | Reset        |
+
+### Device-Setup
+
+- short the boot pin and upload firmware
+- enter setup-mode by pressing both buttons on startup
+- upload you private and public key with the following name
+  "key.pub" und "key"
 
 
 ### thx & refs
