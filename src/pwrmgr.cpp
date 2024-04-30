@@ -6,7 +6,7 @@
 
 doorCMD_t wakeSelector(){
   doorCMD_t res = CMD_UNKNOWN;
-  u_int64_t wakeMask = esp_sleep_get_gpio_wakeup_status();
+  uint64_t wakeMask = esp_sleep_get_gpio_wakeup_status();
 
   //printf("GPIO that triggered the wake up: GPIO %hhu \n",  (uint8_t)((log(wakeMask))/log(2), 0) );
 
