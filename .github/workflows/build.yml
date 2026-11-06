@@ -57,7 +57,57 @@ jobs:
         id: vars
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
+      # bootloader + partition table + app in one image, flash to 0x0
+      # ends before the spiffs partition, keys on the device are kept
+      - name: Create shackey.bin
+        run: |
+          B=.pio/build/esp32-c3-devkitm-1
+          mkdir -p site
+          pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32c3 merge_bin -o site/shackey.bin \
+            --flash_mode dio --flash_freq 80m --flash_size 4MB \
+            0x0 $B/bootloader.bin 0x8000 $B/partitions.bin 0x10000 $B/firmware.bin
+
       - uses: actions/upload-artifact@v4
         with:
-          name: firmware-${{ steps.vars.outputs.sha_short }}.bin
-          path: .pio/build/esp32-c3-devkitm-1/firmware.bin
+          name: shackey-${{ steps.vars.outputs.sha_short }}.bin
+          path: site/shackey.bin
+
+      # web flasher + download on github pages (CORS friendly, release assets are not)
+      - name: Prepare web flasher
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cp webflasher/index.html site/
+          cat > site/manifest.json <<EOM
+          {
+            "name": "shackey",
+            "version": "${{ steps.vars.outputs.sha_short }} ($(date -u +%Y-%m-%d))",
+            "new_install_prompt_erase": false,
+            "new_install_improv_wait_time": 0,
+            "builds": [
+              { "chipFamily": "ESP32-C3", "parts": [ { "path": "shackey.bin", "offset": 0 } ] }
+            ]
+          }
+          EOM
+          cat site/manifest.json
+
+      - uses: actions/upload-pages-artifact@v4
+        if: github.ref == 'refs/heads/main'
+        with:
+          path: site
+
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

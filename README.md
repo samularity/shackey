@@ -3,6 +3,7 @@
 [![build](https://img.shields.io/github/actions/workflow/status/samularity/shackey/build.yml?branch=main&label=build&logo=github&style=flat-square)](https://github.com/samularity/shackey/actions/workflows/build.yml)
 [![cppcheck](https://img.shields.io/github/actions/workflow/status/samularity/shackey/cppcheck.yml?branch=main&label=cppcheck&logo=c%2B%2B&style=flat-square)](https://github.com/samularity/shackey/actions/workflows/cppcheck.yml)
 
+
 ### a simple ESP32-C3 SSH Client  
 
 Its main (and only) goal is to open or close the [shackspace portal](https://github.com/shackspace/portal300) with a button press on a keychain device. 
@@ -72,13 +73,66 @@ graph TD
 | 28 | GPIO21 / U0TXD       | TX-Testpin   |
 |  7 | Chip_EN              | Reset        |
 
+### Firmware update
+
+Flashing keeps your uploaded keys.
+
+use the web flasher to flash the latest version (recommended):
+
+[![web flasher](https://img.shields.io/badge/web%20flasher-flash%20now-1f7a4d?logo=espressif&logoColor=white&style=flat-square)](https://samularity.github.io/shackey/)
+
+
+get the binary and flash it yourself: 
+
+[![download](https://img.shields.io/badge/download-shackey.bin-1f7a4d?logo=github&style=flat-square)](https://samularity.github.io/shackey/shackey.bin)
+
+
+
 ### Device-Setup
 
-- clone with submodules `git clone --recursive` (or `git submodule update --init`)
-- short the boot pin and upload firmware
+- short the boot pin and flash the firmware (web flasher or see below)
 - enter setup-mode by pressing both buttons on startup
 - upload your private and public key with the following name
   "key.pub" and "key"
+
+### Build on NixOS
+
+The toolchains from platformio are prebuilt binaries, so [nix-ld](https://github.com/nix-community/nix-ld) is needed.
+In your `configuration.nix`:
+
+```nix
+programs.nix-ld.enable = true;
+users.users.<you>.extraGroups = [ "dialout" ]; # access to /dev/ttyACM0
+```
+
+Setup once (espidf python deps have no wheels for the newest python, so use 3.12 from `shell.nix`):
+
+```sh
+git clone --recursive https://github.com/samularity/shackey.git
+cd shackey
+nix-shell
+python3.12 -m venv ~/.platformio/penv
+~/.platformio/penv/bin/pip install platformio
+```
+
+The venv links into the nix store, after `nix-collect-garbage` it may be broken, just repeat the setup.
+
+Build (first run downloads espidf and the toolchain):
+
+```sh
+~/.platformio/penv/bin/pio run
+```
+
+Flash via USB, short the boot pin first:
+
+```sh
+~/.platformio/penv/bin/pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32c3 --port /dev/ttyACM0 \
+  write_flash 0x0 .pio/build/esp32-c3-devkitm-1/bootloader.bin \
+  0x8000 .pio/build/esp32-c3-devkitm-1/partitions.bin \
+  0x10000 .pio/build/esp32-c3-devkitm-1/firmware.bin
+```
+
+Update libssh2 to the latest master: `git submodule update --remote`
 
 
 ### thx & refs
