@@ -41,7 +41,7 @@ void printSPIFFSinfo(){
     esp_err_t ret = esp_spiffs_info(conf.partition_label, &total, &used);
 
     if (ret == ESP_OK) {
-        printf("Partition size: total: %u, used: %u\n", total, used );
+        printf("Partition size: total: %zu, used: %zu\n", total, used );
     } else {
         printf("error reading spiffs info\n");
         return;
