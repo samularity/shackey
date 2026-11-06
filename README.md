@@ -1,4 +1,7 @@
-# shackey [![build status](https://github.com/samularity/shackey/actions/workflows/build.yml/badge.svg)](https://github.com/samularity/shackey/actions/workflows/build.yml)
+# shackey
+
+[![build](https://img.shields.io/github/actions/workflow/status/samularity/shackey/build.yml?branch=main&label=build&logo=github&style=flat-square)](https://github.com/samularity/shackey/actions/workflows/build.yml)
+[![cppcheck](https://img.shields.io/github/actions/workflow/status/samularity/shackey/cppcheck.yml?branch=main&label=cppcheck&logo=c%2B%2B&style=flat-square)](https://github.com/samularity/shackey/actions/workflows/cppcheck.yml)
 
 ### a simple ESP32-C3 SSH Client  
 

@@ -11,26 +11,6 @@ permissions:
   contents: write
 
 jobs:
-  cppcheck:
-    # static code analysis, only own code (src/ include/), no sdk / submodules
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-      - name: Install cppcheck
-        run: sudo apt-get update && sudo apt-get install -y cppcheck
-      - name: Run cppcheck
-        run: |
-          cppcheck --version
-          cppcheck --enable=warning,performance,portability \
-            --suppressions-list=.cppcheck-suppressions \
-            --platform=unix32 --std=c++17 -I include \
-            -D'MACSTR="%02x:%02x:%02x:%02x:%02x:%02x"' \
-            -D'ESP_IDF_VERSION_VAL(a,b,c)=(((a)<<16)|((b)<<8)|(c))' \
-            -DESP_IDF_VERSION=0x050500 \
-            --error-exitcode=1 \
-            --template='{file}:{line}: [{severity}] {message} [{id}]' \
-            src
-
   build:
     runs-on: ubuntu-latest
 
