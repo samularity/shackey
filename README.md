@@ -2,9 +2,9 @@
 
 ### a simple ESP32-C3 SSH Client  
 
-It's main (and only goal) is to open or close the [shackspace portal](https://github.com/shackspace/portal300) with a button press on a keychain device. 
+Its main (and only) goal is to open or close the [shackspace portal](https://github.com/shackspace/portal300) with a button press on a keychain device. 
 
-### $\color{#D29922}\textsf{\Large\&#x26A0;\kern{0.2cm}\normalsize  !! Hardware-Issues !! \Large\&#x26A0; }$ 
+### $\color{#D29922}\textsf{\Large ⚠\kern{0.2cm}\normalsize  !! Hardware-Issues !! \Large ⚠ }$ 
 
 - LED2 Green is on in DeepSleep FIX: Remove R7
 - U4 XB6042J2SV-L is not working as expected
@@ -31,8 +31,8 @@ graph TD
     NodeClient["wait for client"] --> connected -- disable --> NodeTimer
 
 
-    NodeWAKE -->|Btn1| NodeJ([open]) -- set cmd=open--> NodeWIFI
-    NodeWAKE -->|Btn2| NodeI([close]) -- set cmd=close--> NodeWIFI
+    NodeWAKE -->|Btn2| NodeJ([open]) -- set cmd=open--> NodeWIFI
+    NodeWAKE -->|Btn1| NodeI([close]) -- set cmd=close--> NodeWIFI
 
     NodeWIFI["connect to wifi"] -- connected --> NodeCMD["ssh cmd"] -- got response --> NodeZZZ
     NodeWIFI-->NodeWIFI
@@ -47,7 +47,7 @@ graph TD
 ### Software components used
 - [libssh2](https://github.com/libssh2/libssh2), updated automatically by CI 
 - It's arduino free without any outdated dependencies or additional overhead.  
-- It's based on ESP-IDF 5.5 (platformio `espressif32@6.13.0`). ESP-IDF 6.x ships mbedTLS 4, which libssh2 does not support yet ([libssh2#2284](https://github.com/libssh2/libssh2/pull/2284)).
+- It's based on espidf 5.5, 6.x needs mbedTLS 4 support in libssh2 ([#2284](https://github.com/libssh2/libssh2/pull/2284)).
 
 ### ESP32-Connection
 
@@ -59,7 +59,7 @@ graph TD
 |  4 | GPIO0 / XTAL_32K_P   | Enable ADC   |
 | 27 | GPIO20 / U0RXD       | ADC          |
 |  9 | GPIO4 / MTMS         | SW1 Close (High when pressed) |
-| 10 | GPIO5 / MTDI         | SW2 Open (High pressed) |
+| 10 | GPIO5 / MTDI         | SW2 Open (High when pressed) |
 | 16 | GPIO10               | LED1 Green   |
 | 12 | GPIO6 / MTCK         | LED1 Red     |
 | 13 | GPIO7 / MTDO         | LED1 Blue    |
@@ -71,10 +71,11 @@ graph TD
 
 ### Device-Setup
 
+- clone with submodules `git clone --recursive` (or `git submodule update --init`)
 - short the boot pin and upload firmware
 - enter setup-mode by pressing both buttons on startup
-- upload you private and public key with the following name
-  "key.pub" und "key"
+- upload your private and public key with the following name
+  "key.pub" and "key"
 
 
 ### thx & refs
