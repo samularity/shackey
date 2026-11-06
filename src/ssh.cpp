@@ -222,7 +222,7 @@ void ssh_task(void *pvParameters)
 
 
 
-	int exitcode = 127;
+	[[maybe_unused]] int exitcode = 127;
 	char *exitsignal = (char *)"none";
 	while((rc = libssh2_channel_close(channel)) == LIBSSH2_ERROR_EAGAIN)
 	waitsocket(sock, session);

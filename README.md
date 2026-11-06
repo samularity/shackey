@@ -45,9 +45,9 @@ graph TD
 
 
 ### Software components used
-- libssh2 ~~latest version~~ [463449fb](https://github.com/libssh2/libssh2/tree/463449fb9ee7dbe5fbe71a28494579a9a6890d6d) is used without any modifications.  
+- [libssh2](https://github.com/libssh2/libssh2), updated automatically by CI 
 - It's arduino free without any outdated dependencies or additional overhead.  
-- Its based on the latest espidf supported by platformio.
+- It's based on ESP-IDF 5.5 (platformio `espressif32@6.13.0`). ESP-IDF 6.x ships mbedTLS 4, which libssh2 does not support yet ([libssh2#2284](https://github.com/libssh2/libssh2/pull/2284)).
 
 ### ESP32-Connection
 

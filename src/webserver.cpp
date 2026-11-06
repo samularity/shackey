@@ -55,12 +55,6 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     //return ESP_OK;
 }
 
-static const httpd_uri_t root = {
-    .uri = "/",
-    .method = HTTP_GET,
-    .handler = root_get_handler
-};
-
 // HTTP Error (404) Handler - Redirects all requests to the root page
 esp_err_t http_404_error_handler(httpd_req_t *req, httpd_err_code_t err)
 {
@@ -396,6 +390,7 @@ httpd_handle_t start_webserver(void)
         .uri = "/",
         .method = HTTP_GET,
         .handler = root_get_handler,
+        .user_ctx = NULL,
     };
     httpd_register_uri_handler(server, &root);
 

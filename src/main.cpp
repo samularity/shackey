@@ -6,8 +6,6 @@ const unsigned int configSTACK = 51200;
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "driver/uart.h"
-#include "esp_vfs_dev.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "nvs_flash.h"
@@ -125,7 +123,7 @@ extern "C" void app_main() {
   //GPIO-INIT
 
   //configure inputs
-	gpio_config_t io_conf;
+	gpio_config_t io_conf = {};
 	io_conf.intr_type = GPIO_INTR_DISABLE;
 	io_conf.mode = GPIO_MODE_INPUT;
   io_conf.pin_bit_mask = ( (1ULL<<GPIO_SW_CLOSE) | (1ULL<<GPIO_SW_OPEN) );
@@ -155,30 +153,24 @@ extern "C" void app_main() {
 	gpio_set_level(GPIO_LED2_GREEN, 1);
 
 
-  uart_driver_install ((uart_port_t)CONFIG_ESP_CONSOLE_UART_NUM, 256, 0, 0, NULL, 0);
-  esp_vfs_dev_uart_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
-
  // Prepare and then apply the LEDC PWM timer configuration
-    ledc_timer_config_t ledc_timer = {
-        .speed_mode       = LEDC_MODE,
-        .duty_resolution  = LEDC_DUTY_RES,
-        .timer_num        = LEDC_TIMER,
-        .freq_hz          = LEDC_FREQUENCY,  // Set output frequency at 5 kHz
-        .clk_cfg          = LEDC_AUTO_CLK
-    };
+    ledc_timer_config_t ledc_timer = {};
+    ledc_timer.speed_mode       = LEDC_MODE;
+    ledc_timer.duty_resolution  = LEDC_DUTY_RES;
+    ledc_timer.timer_num        = LEDC_TIMER;
+    ledc_timer.freq_hz          = LEDC_FREQUENCY;  // Set output frequency at 5 kHz
+    ledc_timer.clk_cfg          = LEDC_AUTO_CLK;
     ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
 
     // Prepare and then apply the LEDC PWM channel configuration
-    ledc_channel_config_t ledc_channel = {
-        .gpio_num       = GPIO_LED1_GREEN,
-        .speed_mode     = LEDC_MODE,
-        .channel        = LEDC_CHANNEL,
-        .intr_type      = LEDC_INTR_DISABLE,
-        .timer_sel      = LEDC_TIMER,
-        .duty           = 0, // Set duty to 0%  //[0, (2**duty_resolution) - 1] 
-        .hpoint         = 0,
-        .flags          = 1
-    };
+    ledc_channel_config_t ledc_channel = {};
+    ledc_channel.gpio_num       = GPIO_LED1_GREEN;
+    ledc_channel.speed_mode     = LEDC_MODE;
+    ledc_channel.channel        = LEDC_CHANNEL;
+    ledc_channel.timer_sel      = LEDC_TIMER;
+    ledc_channel.duty           = 0; // Set duty to 0%  //[0, (2**duty_resolution) - 1]
+    ledc_channel.hpoint         = 0;
+    ledc_channel.flags.output_invert = 1; // LEDs are active low
 
   ledc_channel_config(&ledc_channel);
 
@@ -191,7 +183,7 @@ extern "C" void app_main() {
   s_wifi_event_group = xEventGroupCreate();
   xEventGroupClearBits( s_wifi_event_group, WIFI_CONNECTED_BIT || WIFI_FAIL_BIT || WIFI_CLIENT_CONNECTED_BIT );
 
-  xTaskCreate(TimeoutLoop, "TimeoutLoop", 1024, NULL, (tskIDLE_PRIORITY + 1) , NULL);
+  xTaskCreate(TimeoutLoop, "TimeoutLoop", 3072, NULL, (tskIDLE_PRIORITY + 1) , NULL);
 
   if (ESP_OK == initSPIFFS()){
     printf("sspifs init ok\n");
@@ -238,7 +230,7 @@ extern "C" void app_main() {
   xEventGroup = xEventGroupCreate();// Create Eventgroup for ssh response
   xEventGroupClearBits( xEventGroup, TASK_FINISH_BIT );
       
-  xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*8, (void *) &cfg , tskIDLE_PRIORITY , NULL, portNUM_PROCESSORS - 1);
+  xTaskCreatePinnedToCore(&ssh_task, "ssh", 1024*16, (void *) &cfg , tskIDLE_PRIORITY , NULL, portNUM_PROCESSORS - 1);
 
   // Wait for ssh finish.
   xEventGroupWaitBits( xEventGroup,

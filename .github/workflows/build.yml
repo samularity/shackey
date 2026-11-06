@@ -1,37 +1,63 @@
 name: shackey CI
 
-on: 
+on:
   push:
+  workflow_dispatch:
   schedule:
     - cron: '24 12 * * 2,5'
 #when new src and at 12:24 on Tuesday and Friday.
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/cache@v3
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Update libssh2 to latest master
+        if: github.event_name != 'push'
+        run: |
+          git submodule update --remote components/libssh2/libssh2
+          git -C components/libssh2/libssh2 log -1 --format='libssh2 %h %cd %s'
+
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
             ~/.platformio/.cache
-          key: ${{ runner.os }}-pio
-      - uses: actions/setup-python@v4
+          key: ${{ runner.os }}-pio-${{ hashFiles('platformio.ini') }}
+      - uses: actions/setup-python@v6
         with:
-          python-version: '3.9'
+          python-version: '3.12'
       - name: Install PlatformIO Core
         run: pip install --upgrade platformio
 
       - name: Build PlatformIO Project
         run: pio run
 
+      - name: Commit libssh2 update
+        if: github.event_name != 'push' && github.ref == 'refs/heads/main'
+        run: |
+          if git diff --quiet -- components/libssh2/libssh2; then
+            echo "libssh2 already up to date"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add components/libssh2/libssh2
+          git commit -m "update libssh2 to $(git -C components/libssh2/libssh2 rev-parse --short HEAD)"
+          git push
+
       - name: get short hash
         id: vars
         run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: firmware-${{ steps.vars.outputs.sha_short }}.bin
           path: .pio/build/esp32-c3-devkitm-1/firmware.bin

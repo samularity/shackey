@@ -3,6 +3,11 @@
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include <inttypes.h>
+#include "esp_idf_version.h"
+
+#if ESP_IDF_VERSION < ESP_IDF_VERSION_VAL(6, 0, 0)
+#define esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown esp_deep_sleep_enable_gpio_wakeup
+#endif
 
 doorCMD_t wakeSelector(){
   doorCMD_t res = CMD_UNKNOWN;
@@ -27,7 +32,7 @@ void enterDeepsleep(){
   //source. They are pins: 0 to 5
   //0b110000 = bitmask GPIO4, GPIO5
 
-  esp_deep_sleep_enable_gpio_wakeup(0b110000, ESP_GPIO_WAKEUP_GPIO_HIGH);
+  esp_sleep_enable_gpio_wakeup_on_hp_periph_powerdown(0b110000, ESP_GPIO_WAKEUP_GPIO_HIGH);
   printf("Going to deep-sleep now\n");
   //vTaskDelay(100 / portTICK_PERIOD_MS);
 
