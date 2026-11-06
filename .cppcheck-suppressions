@@ -1,0 +1,13 @@
+# cppcheck suppressions (verified false positives)
+
+# sdk headers are not checked
+missingIncludeSystem
+
+# embedded file size: _binary_root_html_end - _binary_root_html_start
+subtractPointers:src/webserver.cpp
+
+# hp == NULL never returns (endless loop), cppcheck can't see that
+nullPointerRedundantCheck:src/ssh.cpp
+
+# struct sockaddr_in -> struct sockaddr cast for connect()
+dangerousTypeCast:src/ssh.cpp
