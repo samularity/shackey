@@ -51,6 +51,9 @@ Its main (and only) goal is to open or close the [shackspace portal](https://git
 - open a SSH session with your private key on the portal server
 - in setup-mode provide a webserver to upload or delete your key
 
+<details>
+<summary>flowchart</summary>
+
 ```mermaid
 graph TD
     NodeStart((deepsleep)) --> wakeup -- wakup-source --> NodeWAKE{ } 
@@ -74,6 +77,8 @@ graph TD
 
     NodeZZZ((deepsleep))
 ```
+
+</details>
 
 
 ## Hardware
